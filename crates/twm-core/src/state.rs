@@ -241,12 +241,25 @@ impl Wm {
 
     // ------------------------------------------------------------ windows
 
-    fn tiling_area(&self, ws: u32) -> Rect {
-        let m = self.workspaces.get(&ws).map(|w| w.monitor).unwrap_or(0);
-        let mon = &self.monitors[m.min(self.monitors.len() - 1)];
+    /// Monitor work area minus space reserved by `[[monitor]]` rules.
+    pub fn usable_area(&self, monitor: usize) -> Rect {
+        let mon = &self.monitors[monitor.min(self.monitors.len() - 1)];
         let s = mon.scale();
+        match self.cfg.monitors.iter().find(|r| r.index == monitor + 1) {
+            Some(r) => {
+                let f = |v: i32| (v as f32 * s).round() as i32;
+                let rv = r.reserved;
+                mon.work.inset(f(rv.left), f(rv.top), f(rv.right), f(rv.bottom))
+            }
+            None => mon.work,
+        }
+    }
+
+    fn tiling_area(&self, ws: u32) -> Rect {
+        let m = self.workspaces.get(&ws).map(|w| w.monitor).unwrap_or(0).min(self.monitors.len() - 1);
+        let s = self.monitors[m].scale();
         let g = (self.cfg.general.gaps_out as f32 * s).round() as i32;
-        mon.work.shrink(g)
+        self.usable_area(m).shrink(g)
     }
 
     /// Starts managing a window. `adopting` is true for windows that
@@ -269,7 +282,7 @@ impl Wm {
         let mode = if class.decision == Decision::Float { Mode::Floating } else { Mode::Tiled };
         let mut float_rect = facts.rect;
         let ws_mon = self.workspaces[&ws].monitor;
-        let work = self.monitors[ws_mon].work;
+        let work = self.usable_area(ws_mon);
         if let Some((w, h)) = class.float_size {
             float_rect = Rect::new(float_rect.x, float_rect.y, w, h);
         }
@@ -514,7 +527,7 @@ impl Wm {
             for (id, rect) in tiles {
                 let w = &self.windows[&id];
                 let full = ws.fullscreen == Some(id);
-                let rect = if full { mon.work } else { rect };
+                let rect = if full { self.usable_area(mi) } else { rect };
                 d.placements.push(Placement {
                     id,
                     rect,
@@ -525,10 +538,9 @@ impl Wm {
             }
             for w in self.windows.values().filter(|w| w.ws == ws_id && w.mode == Mode::Floating && !w.minimized) {
                 let full = ws.fullscreen == Some(w.id);
-                let rect = if full { mon.work } else { w.float_rect };
+                let rect = if full { self.usable_area(mi) } else { w.float_rect };
                 d.placements.push(Placement { id: w.id, rect, border: if full { None } else { ring(rect, w) }, floating: true, focused: self.focused == Some(w.id) });
             }
-            let _ = mi;
         }
         for w in self.windows.values() {
             if !self.is_visible_ws(w.ws) && !w.minimized {
@@ -819,7 +831,7 @@ impl Wm {
             Mode::Tiled => {
                 // Float at the current tile size, slightly inset, like Hyprland.
                 let cur = self.current_rect(id).unwrap_or(w.float_rect);
-                let mon = self.monitors[self.workspaces[&ws].monitor].work;
+                let mon = self.usable_area(self.workspaces[&ws].monitor);
                 self.detach(id);
                 let w = self.windows.get_mut(&id).unwrap();
                 w.mode = Mode::Floating;
@@ -1214,6 +1226,19 @@ mod tests {
         wm.on_user_move(2, Rect::new(0, 0, 1000, 900), (1000, 450), true);
         assert_eq!(rect_of(&wm, 2).w, 1000);
         assert_eq!(rect_of(&wm, 1).x, 1000);
+    }
+
+    #[test]
+    fn reserved_area_shrinks_tiling_and_fullscreen() {
+        let c = cfg("[[monitor]]
+index = 1
+reserved = { top = 100, left = 600 }
+");
+        let mut wm = Wm::new(c, vec![mon("A", 0, 1600, 900)]);
+        add(&mut wm, 1);
+        assert_eq!(rect_of(&wm, 1), Rect::new(600, 100, 1000, 800));
+        wm.dispatch(&Action::ToggleFullscreen);
+        assert_eq!(rect_of(&wm, 1), Rect::new(600, 100, 1000, 800));
     }
 
     #[test]

@@ -10,6 +10,7 @@ pub mod anim;
 pub mod color;
 pub mod config;
 pub mod geom;
+pub mod ipc;
 pub mod keys;
 pub mod layout;
 pub mod ring;

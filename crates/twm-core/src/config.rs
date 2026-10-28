@@ -210,6 +210,24 @@ pub struct WorkspaceRule {
     pub name: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct Reserved {
+    pub top: i32,
+    pub bottom: i32,
+    pub left: i32,
+    pub right: i32,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct MonitorRule {
+    /// 1-based monitor number (primary first, then left-to-right).
+    pub index: usize,
+    /// Space kept free at the monitor edges (logical px), e.g. for a status bar.
+    pub reserved: Reserved,
+}
+
 // ---------------------------------------------------------------- compiled
 
 #[derive(Clone, Debug)]
@@ -235,6 +253,7 @@ pub struct Config {
     pub binds: Vec<Bind>,
     pub rules: Vec<Rule>,
     pub workspaces: Vec<WorkspaceRule>,
+    pub monitors: Vec<MonitorRule>,
     pub default_layout: LayoutKind,
 }
 
@@ -446,7 +465,7 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         }
     };
 
-    const KNOWN: &[&str] = &["theme", "variables", "general", "decoration", "animations", "dwindle", "master", "input", "binds", "rule", "workspace"];
+    const KNOWN: &[&str] = &["theme", "variables", "general", "decoration", "animations", "dwindle", "master", "input", "binds", "rule", "workspace", "monitor"];
     for k in table.keys() {
         if !KNOWN.contains(&k.as_str()) {
             ctx.warn(k, format!("unknown section or option (ignored); known: {}", KNOWN.join(", ")));
@@ -675,6 +694,30 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         Some(_) => ctx.err("workspace", "use [[workspace]] array-of-tables syntax"),
     }
 
+    // ---- monitor rules
+    let mut monitors: Vec<MonitorRule> = Vec::new();
+    match table.get("monitor") {
+        None => {}
+        Some(toml::Value::Array(arr)) => {
+            for (i, v) in arr.iter().enumerate() {
+                let setting = format!("monitor[{i}]");
+                match v.clone().try_into::<MonitorRule>() {
+                    Ok(m) if m.index >= 1 => {
+                        let r = m.reserved;
+                        if [r.top, r.bottom, r.left, r.right].iter().any(|x| !(0..=4000).contains(x)) {
+                            ctx.err(&format!("{setting}.reserved"), "values must be 0-4000 — monitor rule skipped");
+                            continue;
+                        }
+                        monitors.push(m)
+                    }
+                    Ok(_) => ctx.err(&format!("{setting}.index"), "index must be 1 or more — monitor rule skipped"),
+                    Err(e) => ctx.err(&setting, format!("{} — monitor rule skipped", e.to_string().trim())),
+                }
+            }
+        }
+        Some(_) => ctx.err("monitor", "use [[monitor]] array-of-tables syntax"),
+    }
+
     let default_layout = LayoutKind::parse(&general.layout).unwrap_or(LayoutKind::Dwindle);
     let config = Config {
         theme,
@@ -690,6 +733,7 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         binds,
         rules,
         workspaces,
+        monitors,
         default_layout,
     };
     LoadReport { config, diagnostics: ctx.diags, used_fallback: false }
@@ -803,6 +847,22 @@ mod tests {
         assert_ne!(r.config.decoration.active_border, Decoration::default().active_border);
         let missing = load("theme = \"nope\"");
         assert!(missing.errors().any(|d| d.setting == "theme"));
+    }
+
+    #[test]
+    fn monitor_rules() {
+        let r = load("[[monitor]]
+index = 2
+reserved = { top = 40 }
+[[monitor]]
+index = 0
+[[monitor]]
+index = 1
+reserved = { left = -5 }
+");
+        assert_eq!(r.config.monitors.len(), 1);
+        assert_eq!(r.config.monitors[0].reserved.top, 40);
+        assert_eq!(r.errors().count(), 2);
     }
 
     #[test]
