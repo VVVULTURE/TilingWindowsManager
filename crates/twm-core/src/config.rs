@@ -34,6 +34,10 @@ pub struct General {
     /// How windows on inactive workspaces are hidden: "hide" or "minimize".
     pub hide_method: String,
     pub focus_new_windows: bool,
+    /// When a window on a hidden workspace activates itself, switch to that
+    /// workspace (true) or keep the current one and take focus back (false,
+    /// Hyprland's `misc:focus_on_activate` default).
+    pub focus_on_activate: bool,
     pub mouse_follows_focus: bool,
     /// Drag a tiled window onto another to swap them.
     pub drag_to_swap: bool,
@@ -54,6 +58,7 @@ impl Default for General {
             float_dialogs: true,
             hide_method: "hide".into(),
             focus_new_windows: true,
+            focus_on_activate: false,
             mouse_follows_focus: false,
             drag_to_swap: true,
             restore_on_exit: true,

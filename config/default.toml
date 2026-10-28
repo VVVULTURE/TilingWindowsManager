@@ -29,6 +29,7 @@ float_unresizable = true    # windows without a resize frame float
 float_dialogs = true        # owned windows (dialogs) float
 hide_method = "hide"        # how other workspaces are hidden: hide | minimize
 focus_new_windows = true
+focus_on_activate = false   # a hidden window activating itself switches to its workspace
 mouse_follows_focus = false # move the cursor to windows focused by keyboard
 drag_to_swap = true         # drop a dragged tiled window onto another to swap
 restore_on_exit = true      # on quit, put pre-existing windows back where they were

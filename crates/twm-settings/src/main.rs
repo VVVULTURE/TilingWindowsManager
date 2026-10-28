@@ -656,6 +656,7 @@ impl App {
             self.boolean(ui, &["general", "float_dialogs"], "Float dialogs", "Owned windows such as Save As dialogs float instead of tiling.", g.float_dialogs);
             self.boolean(ui, &["general", "float_unresizable"], "Float fixed-size windows", "Windows without a resize border float.", g.float_unresizable);
             self.boolean(ui, &["general", "focus_new_windows"], "Focus new windows", "Give keyboard focus to newly managed windows.", g.focus_new_windows);
+            self.boolean(ui, &["general", "focus_on_activate"], "Follow apps that activate themselves", "When a window on a hidden workspace activates itself, switch to its workspace. Off: stay and keep focus on the visible window.", g.focus_on_activate);
             self.boolean(ui, &["general", "mouse_follows_focus"], "Mouse follows focus", "Move the cursor to windows focused from the keyboard.", g.mouse_follows_focus);
             self.boolean(ui, &["general", "drag_to_swap"], "Drag to swap", "Dropping a dragged tiled window onto another swaps them.", g.drag_to_swap);
             self.boolean(ui, &["general", "restore_on_exit"], "Restore on exit", "On quit, put windows that existed before the manager started back where they were.", g.restore_on_exit);

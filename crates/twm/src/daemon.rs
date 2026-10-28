@@ -271,7 +271,7 @@ impl Daemon {
             }
         }
         if let Some(fg) = self.foreground {
-            self.wm.on_focus(Some(fg));
+            self.wm.on_focus(Some(fg), false);
         }
     }
 
@@ -593,7 +593,10 @@ impl Daemon {
                 }
                 if self.wm.windows.contains_key(&id) {
                     let before = self.wm.active_ws();
-                    self.wm.on_focus(Some(id));
+                    // With minimize-hiding, a hidden window that is no longer
+                    // minimized was restored by the user (taskbar click).
+                    let user_restored = self.wm.config().general.hide_method == "minimize" && !window::is_minimized(id);
+                    self.wm.on_focus(Some(id), user_restored);
                     let after = self.wm.active_ws();
                     self.apply(if before != after { Anim::None } else { Anim::Windows });
                     self.update_tray();
@@ -616,6 +619,7 @@ impl Daemon {
                         if let Some(after) = window::frame_rect(id) {
                             let resized = (after.w - before.w).abs() > 2 || (after.h - before.h).abs() > 2;
                             let cursor = window::cursor_pos();
+                            log::debug!("user {} {id:#x}: {before:?} -> {after:?}, cursor {cursor:?}", if resized { "resized" } else { "moved" });
                             self.wm.on_user_move(id, after, cursor, resized);
                             self.applied.remove(&id); // force re-place
                             self.apply(Anim::Windows);

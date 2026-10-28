@@ -81,6 +81,7 @@ default binding off the Windows key.
 | `float_dialogs` | `true` | | Owned windows (dialogs) float. |
 | `hide_method` | `"hide"` | `hide`, `minimize` | How windows on inactive workspaces are hidden. `hide` removes them from the taskbar too; `minimize` keeps taskbar buttons. |
 | `focus_new_windows` | `true` | | Give focus to newly managed windows. |
+| `focus_on_activate` | `false` | | When a window on a hidden workspace activates itself (e.g. an app finishing loading), switch to that workspace (`true`), or stay and give focus back to the visible window (`false`, Hyprland's default). With `hide_method = "minimize"`, restoring a window from its taskbar button always switches. |
 | `mouse_follows_focus` | `false` | | Move the pointer to windows focused with the keyboard. |
 | `drag_to_swap` | `true` | | Dropping a dragged tiled window on another one swaps them. |
 | `restore_on_exit` | `true` | | On quit, put windows that existed before the manager started back to their original position and state. |

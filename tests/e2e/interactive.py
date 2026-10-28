@@ -10,6 +10,8 @@ must only run while nobody is using the machine:
     the manager restores pre-existing windows on quit
 
 Usage: python tests/e2e/interactive.py [--bin target/debug] [--min-idle 60]
+                                      [--only t_mouse,t_notepad] [--keep]
+--keep leaves the temporary folder (config, trace log twm.log) for diagnosis.
 """
 
 import argparse
@@ -119,6 +121,7 @@ def check(name):
             except Exception as e:  # noqa: BLE001
                 RESULTS.append((name, False, str(e)))
                 log(f"FAIL {name}: {e}")
+        run.__name__ = fn.__name__
         return run
     return deco
 
@@ -263,8 +266,10 @@ def t_mouse(ctx):
     configure(ctx, "hook")
     old = wt.POINT()
     user32.GetCursorPos(ctypes.byref(old))
-    _, ids = ctx.spawn(2, "DRAG")
+    proc, ids = ctx.spawn(2, "DRAG")
     try:
+        # Earlier tests cycle the layout; swapping is only visible in dwindle/master.
+        ctx.ctl("dispatch", "layout", "dwindle")
         assert settle(ctx, ids, 3)
         pl = placements(ctx.state())
         left, right = sorted(ids, key=lambda i: pl[i]["rect"]["x"])
@@ -274,16 +279,26 @@ def t_mouse(ctx):
         assert settle(ctx, ids, 3), "tiles did not settle after the drop"
         pl = placements(ctx.state())
         assert pl[left]["rect"]["x"] > pl[right]["rect"]["x"], "windows were not swapped"
-        # Now `right` is on the left: drag its right edge (invisible resize border) 120 px right.
+        # Now `right` is on the left: drag its right edge 60 px right (more could
+        # push the neighbour below the system minimum window width). Grab 1 px
+        # outside the visible frame: inside its own invisible resize border, before
+        # the neighbour's border (which starts gaps - border px further right).
         f = frame(right)
         before_w = f[2]
-        drag(f[0] + f[2] + 3, f[1] + f[3] // 2, f[0] + f[2] + 123, f[1] + f[3] // 2)
+        drag(f[0] + f[2] + 1, f[1] + f[3] // 2, f[0] + f[2] + 61, f[1] + f[3] // 2)
         assert settle(ctx, ids, 3), "tiles did not settle after the resize"
         after_w = placements(ctx.state())[right]["rect"]["w"]
-        assert abs(after_w - (before_w + 120)) <= 12, f"split did not follow the drag: {before_w} -> {after_w}"
+        assert abs(after_w - (before_w + 60)) <= 8, f"split did not follow the drag: {before_w} -> {after_w}"
         return f"swap ok; edge drag {before_w} -> {after_w} px"
     finally:
         user32.SetCursorPos(old.x, old.y)
+        # Free the space: later tests need tiles above apps' minimum sizes.
+        proc.kill()
+        wait_for(lambda: not any(is_window(i) for i in ids), 3)
+        time.sleep(0.3)
+        # Closing them makes the manager re-focus another window, which may
+        # inject its activation key: that input is ours, not the user's.
+        GUARD["last"] = last_input_tick()
 
 
 def launch(args, **kw):
@@ -304,6 +319,16 @@ def find_new_window(ctx, process, before, timeout=15):
             return h
         time.sleep(0.2)
     return None
+
+
+def close_app(h):
+    """Close a tested app so the next test's tiles stay above apps' minimum
+    window sizes (the test area is small). Focus moves as a result, which may
+    make the manager inject its activation key: count that as our input."""
+    user32.PostMessageW(wt.HWND(h), 0x0010, 0, 0)  # WM_CLOSE
+    wait_for(lambda: not is_window(h), 5)
+    time.sleep(0.3)
+    GUARD["last"] = last_input_tick()
 
 
 def snapshot_ids(ctx):
@@ -329,7 +354,9 @@ def t_notepad(ctx):
     ctx.ctl("dispatch", "workspace", str(ws))
     assert wait_for(lambda: visible(h)), "Notepad not shown again"
     assert settle(ctx, [h], 3)
-    return f"class {cls(h)}"
+    name = cls(h)
+    close_app(h)
+    return f"class {name}"
 
 
 @check("VS Code (Electron) tiles, hides with its workspace and comes back")
@@ -424,6 +451,8 @@ def main():
     ap.add_argument("--bin", default=os.path.join(e2e.ROOT, "target", "debug"))
     ap.add_argument("--min-idle", type=float, default=60)
     ap.add_argument("--monitor", type=int, default=0)
+    ap.add_argument("--only", default="", help="comma-separated test function names")
+    ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()
     if idle_ms() < args.min_idle * 1000:
         log(f"user active {idle_ms() / 1000:.0f} s ago; interactive tests need {args.min_idle:.0f} s of idle time — not running")
@@ -457,7 +486,12 @@ def main():
         ctx.area = (mon["work"]["x"] + w - aw, mon["work"]["y"], aw, ah)
         configure(ctx, "hotkey")
         ctx.focus_test_monitor()
-        for t in [t_hook, t_hook_layout, t_hotkey, t_mouse, t_notepad, t_electron, t_uwp, t_restore_on_exit, t_elevated]:
+        tests = [t_hook, t_hook_layout, t_hotkey, t_mouse, t_notepad, t_electron, t_uwp, t_restore_on_exit, t_elevated]
+        only = [x for x in args.only.split(",") if x]
+        if only:
+            # t_hook spawns the windows later tests rely on.
+            tests = [t for t in tests if t.__name__ in only or t.__name__ == "t_hook"]
+        for t in tests:
             t(ctx)
     except UserReturned as e:
         aborted = str(e)
@@ -474,7 +508,10 @@ def main():
                 p.kill()
         subprocess.run(["taskkill", "/F", "/IM", "CalculatorApp.exe"], capture_output=True)
         time.sleep(1)
-        shutil.rmtree(tmp, ignore_errors=True)
+        if args.keep:
+            log(f"kept {tmp} (trace log: {os.path.join(ctx.data_dir, 'twm.log')})")
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
     passed = sum(1 for r in RESULTS if r[1])
     log(f"\n{passed}/{len(RESULTS)} interactive checks passed" + (f" (aborted: {aborted})" if aborted else ""))
     for name, ok, info in RESULTS:

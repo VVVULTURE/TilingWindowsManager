@@ -383,11 +383,23 @@ impl Wm {
 
     /// The user (or the OS) activated a window. Switching to its workspace
     /// if it is hidden keeps taskbar/Alt+Tab activation working.
-    pub fn on_focus(&mut self, id: Option<WinId>) {
+    /// A managed window became the foreground window. `user_restored` is
+    /// true when the user brought it back themselves (taskbar click on a
+    /// window hidden by minimizing).
+    pub fn on_focus(&mut self, id: Option<WinId>, user_restored: bool) {
         match id {
             Some(id) if self.windows.contains_key(&id) => {
                 let ws = self.windows[&id].ws;
                 if !self.is_visible_ws(ws) {
+                    if !(self.cfg.general.focus_on_activate || user_restored) {
+                        // The app activated itself while its workspace is hidden:
+                        // stay here and give focus back to the visible window.
+                        let back = self.focused_ws_window().or_else(|| self.workspaces.get(&self.active_ws()).and_then(|w| w.last_focus));
+                        if let Some(b) = back {
+                            self.focus_request = Some(b);
+                        }
+                        return;
+                    }
                     let m = self.workspaces[&ws].monitor;
                     self.switch_ws_on(m, ws);
                 }
@@ -436,11 +448,13 @@ impl Wm {
             let tiles = self.tiles(ws);
             let Some(cur) = tiles.iter().find(|(i, _)| *i == id).map(|(_, r)| *r) else { return };
             let opts = self.cfg.layout_options();
+            // Gaps are configured at 96 DPI and scaled per monitor (see `tiles`).
+            let s = self.monitors[self.workspaces[&ws].monitor.min(self.monitors.len() - 1)].scale();
+            let g = (self.cfg.general.gaps_in as f32 * s).round() as i32;
             let wsp = self.workspaces.get_mut(&ws).unwrap();
             match &mut wsp.layout {
                 Layout::Dwindle(d) => {
                     // Translate visual edges back to tile edges (gaps).
-                    let g = self.cfg.general.gaps_in;
                     let tgt = Rect::from_ltrb(
                         if cur.x > area.x { rect.x - g } else { area.x },
                         if cur.y > area.y { rect.y - g } else { area.y },
@@ -1153,12 +1167,30 @@ mod tests {
     }
 
     #[test]
-    fn activation_of_hidden_window_switches_workspace() {
+    fn self_activation_of_hidden_window_does_not_switch_by_default() {
         let mut wm = one();
+        add(&mut wm, 1);
+        add(&mut wm, 2);
+        wm.dispatch(&Action::MoveToWorkspace(WsTarget::Id(4), false));
+        assert_eq!(wm.active_ws(), 1);
+        let visible = wm.focused.expect("a window on workspace 1 keeps focus");
+        wm.take_focus_request();
+        wm.on_focus(Some(2), false);
+        assert_eq!(wm.active_ws(), 1, "focus_on_activate = false keeps the workspace");
+        assert_eq!(wm.take_focus_request(), Some(visible), "focus is given back to the visible window");
+        // The user restoring it themselves (taskbar, minimize hiding) switches.
+        wm.on_focus(Some(2), true);
+        assert_eq!(wm.active_ws(), 4);
+    }
+
+    #[test]
+    fn focus_on_activate_switches_workspace() {
+        let c = load_str("[general]\nfocus_on_activate = true\ngaps_in = 0\ngaps_out = 0\nborder_size = 0\n", "t", None, &|_| None).config;
+        let mut wm = Wm::new(c, vec![mon("A", 0, 1600, 900)]);
         add(&mut wm, 1);
         wm.dispatch(&Action::MoveToWorkspace(WsTarget::Id(4), false));
         assert_eq!(wm.active_ws(), 1);
-        wm.on_focus(Some(1));
+        wm.on_focus(Some(1), false);
         assert_eq!(wm.active_ws(), 4);
     }
 
