@@ -229,6 +229,63 @@ def t_hotkey(ctx):
     return f"not registered (owned by Windows): {', '.join(unreg)}"
 
 
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [("dx", wt.LONG), ("dy", wt.LONG), ("mouseData", wt.DWORD), ("dwFlags", wt.DWORD), ("time", wt.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+def mouse(flags):
+    i = INPUT()
+    i.type = 0
+    ctypes.memmove(ctypes.byref(i.u), ctypes.byref(MOUSEINPUT(0, 0, 0, flags, 0, 0)), ctypes.sizeof(MOUSEINPUT))
+    guard()
+    user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(INPUT))
+    GUARD["last"] = last_input_tick()
+
+
+def drag(x0, y0, x1, y1, steps=25):
+    """Left-button drag with real (injected) input, like a user would."""
+    user32.SetCursorPos(x0, y0)
+    time.sleep(0.05)
+    mouse(0x0002)  # LEFTDOWN
+    time.sleep(0.1)
+    for s in range(1, steps + 1):
+        user32.SetCursorPos(int(x0 + (x1 - x0) * s / steps), int(y0 + (y1 - y0) * s / steps))
+        mouse(0x0001)  # MOVE (relative 0) so the move is seen as input
+        time.sleep(0.015)
+    time.sleep(0.1)
+    mouse(0x0004)  # LEFTUP
+    GUARD["last"] = last_input_tick()
+    time.sleep(0.3)
+
+
+@check("mouse: dropping a tile on another swaps them; dragging an edge resizes the split")
+def t_mouse(ctx):
+    configure(ctx, "hook")
+    old = wt.POINT()
+    user32.GetCursorPos(ctypes.byref(old))
+    _, ids = ctx.spawn(2, "DRAG")
+    try:
+        assert settle(ctx, ids, 3)
+        pl = placements(ctx.state())
+        left, right = sorted(ids, key=lambda i: pl[i]["rect"]["x"])
+        lf, rf = frame(left), frame(right)
+        # Title bar of the left window -> centre of the right window.
+        drag(lf[0] + 60, lf[1] + 12, rf[0] + rf[2] // 2, rf[1] + rf[3] // 2)
+        assert settle(ctx, ids, 3), "tiles did not settle after the drop"
+        pl = placements(ctx.state())
+        assert pl[left]["rect"]["x"] > pl[right]["rect"]["x"], "windows were not swapped"
+        # Now `right` is on the left: drag its right edge (invisible resize border) 120 px right.
+        f = frame(right)
+        before_w = f[2]
+        drag(f[0] + f[2] + 3, f[1] + f[3] // 2, f[0] + f[2] + 123, f[1] + f[3] // 2)
+        assert settle(ctx, ids, 3), "tiles did not settle after the resize"
+        after_w = placements(ctx.state())[right]["rect"]["w"]
+        assert abs(after_w - (before_w + 120)) <= 12, f"split did not follow the drag: {before_w} -> {after_w}"
+        return f"swap ok; edge drag {before_w} -> {after_w} px"
+    finally:
+        user32.SetCursorPos(old.x, old.y)
+
+
 def launch(args, **kw):
     return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
 
@@ -319,18 +376,21 @@ def t_uwp(ctx):
 
 @check("elevated Task Manager is detected and left alone (UIPI)")
 def t_elevated(ctx):
-    before = snapshot_ids(ctx)
-    # Minimized: an unelevated process cannot close an elevated window
-    # afterwards (UIPI), so keep it out of the way.
-    subprocess.run(["cmd", "/c", "start", "/min", "", "taskmgr.exe"])
-    end = time.time() + 10
-    h = None
-    while time.time() < end and not h:
-        guard()
-        for w in ctx.ctl("windows"):
-            if w["process"].lower() == "taskmgr.exe" and w["hwnd"] not in before:
-                h = w["hwnd"]
-        time.sleep(0.2)
+    def find():
+        return next((w["hwnd"] for w in ctx.ctl("windows") if w["process"].lower() == "taskmgr.exe"), None)
+    h = find()
+    if not h:
+        # Minimized: an unelevated process cannot close an elevated window
+        # afterwards (UIPI), so keep it out of the way. Task Manager is
+        # single-instance; starting it again would activate the existing
+        # (elevated) window, after which UIPI blocks all injected input —
+        # so this test runs last and reuses an open instance.
+        subprocess.run(["cmd", "/c", "start", "/min", "", "taskmgr.exe"])
+        end = time.time() + 10
+        while time.time() < end and not h:
+            guard()
+            h = find()
+            time.sleep(0.2)
     assert h, "Task Manager window not found"
     ctx.apps.append(h)
     ex = ctx.ctl("explain", hex(h))
@@ -355,6 +415,8 @@ def t_restore_on_exit(ctx):
     assert wait_for(lambda: all(frame(i) != orig[i] for i in ids), 3), "windows were not tiled after restart"
     ctx.stop()
     assert wait_for(lambda: all(frame(i) == orig[i] for i in ids), 3), f"not restored: {[(frame(i), orig[i]) for i in ids]}"
+    ctx.start()  # later tests need a running manager
+    ctx.focus_test_monitor()
 
 
 def main():
@@ -395,7 +457,7 @@ def main():
         ctx.area = (mon["work"]["x"] + w - aw, mon["work"]["y"], aw, ah)
         configure(ctx, "hotkey")
         ctx.focus_test_monitor()
-        for t in [t_hook, t_hook_layout, t_hotkey, t_notepad, t_electron, t_uwp, t_elevated, t_restore_on_exit]:
+        for t in [t_hook, t_hook_layout, t_hotkey, t_mouse, t_notepad, t_electron, t_uwp, t_restore_on_exit, t_elevated]:
             t(ctx)
     except UserReturned as e:
         aborted = str(e)

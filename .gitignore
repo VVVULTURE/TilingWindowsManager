@@ -20,3 +20,5 @@ desktop.ini
 .env
 *.pfx
 *.key
+__pycache__/
+*.pyc
