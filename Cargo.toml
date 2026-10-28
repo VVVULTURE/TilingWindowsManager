@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/twm-core", "crates/twm", "crates/twmctl", "crates/twm-testwin", "tools/platform-probe"]
+members = ["crates/twm-core", "crates/twm", "crates/twmctl", "crates/twm-testwin", "crates/twm-settings", "tools/platform-probe"]
 
 [workspace.package]
 version = "0.1.0"

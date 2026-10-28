@@ -821,7 +821,7 @@ impl Daemon {
         let exe = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("twm-settings.exe")));
         match exe.filter(|p| p.exists()) {
             Some(p) => {
-                let _ = host::exec(&format!("\"{}\"", p.display()));
+                let _ = host::exec(&format!("\"{}\" --config \"{}\"", p.display(), self.config_path.display()));
             }
             None => self.open_config(),
         }

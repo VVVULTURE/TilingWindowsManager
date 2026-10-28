@@ -1,0 +1,29 @@
+[package]
+name = "twm-settings"
+description = "Settings and control window for TilingWindowsManager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "twm-settings"
+path = "src/main.rs"
+
+[dependencies]
+twm-core.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+toml_edit = "0.25"
+egui = { version = "0.37", default-features = false, features = ["default_fonts"] }
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
+
+[dependencies.windows]
+workspace = true
+features = [
+  "Win32_Foundation",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_Threading",
+  "Win32_Security",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
