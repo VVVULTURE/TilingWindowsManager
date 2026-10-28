@@ -248,6 +248,9 @@ pub fn classify(f: &WindowFacts, rules: &[Rule], opts: &ClassifyOptions) -> Clas
     if f.topmost {
         heuristic(Decision::Float, "always-on-top window".into(), &mut c.reasons);
     }
+    if f.process.eq_ignore_ascii_case("twm-settings.exe") {
+        heuristic(Decision::Float, "the window manager's settings window".into(), &mut c.reasons);
+    }
     if !opts.manage_by_default {
         heuristic(Decision::Ignore, "general.manage_by_default = false and no rule enables it".into(), &mut c.reasons);
     }
@@ -343,6 +346,7 @@ mod tests {
         assert_eq!(classify(&WindowFacts { resizable: false, ..normal() }, &[], &OPTS).decision, Decision::Float);
         assert_eq!(classify(&WindowFacts { tool_window: true, ..normal() }, &[], &OPTS).decision, Decision::Ignore);
         assert_eq!(classify(&WindowFacts { fullscreen: true, ..normal() }, &[], &OPTS).decision, Decision::Ignore);
+        assert_eq!(classify(&WindowFacts { process: "twm-settings.exe".into(), ..normal() }, &[], &OPTS).decision, Decision::Float);
         let off = ClassifyOptions { float_dialogs: false, float_unresizable: false, ..OPTS };
         assert_eq!(classify(&WindowFacts { owned: true, resizable: false, ..normal() }, &[], &off).decision, Decision::Tile);
     }

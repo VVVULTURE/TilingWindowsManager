@@ -8,8 +8,6 @@
 mod paths;
 
 use serde_json::Value;
-use std::io::{Read, Write};
-use std::time::{Duration, Instant};
 use twm_core::ipc::{Request, Response};
 
 const USAGE: &str = "\
@@ -35,34 +33,7 @@ Commands that work without the manager:
 ";
 
 fn call(req: &Request) -> Result<Response, String> {
-    let name = paths::pipe_name();
-    let deadline = Instant::now() + Duration::from_secs(3);
-    let mut pipe = loop {
-        match std::fs::OpenOptions::new().read(true).write(true).open(&name) {
-            Ok(p) => break p,
-            // ERROR_PIPE_BUSY: another client is being served; retry briefly.
-            Err(e) if e.raw_os_error() == Some(231) && Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            Err(e) => return Err(format!("TilingWindowsManager is not running ({e})")),
-        }
-    };
-    let mut line = serde_json::to_vec(req).map_err(|e| e.to_string())?;
-    line.push(b'\n');
-    pipe.write_all(&line).map_err(|e| e.to_string())?;
-    // Read one response line. The server disconnects right after writing,
-    // which surfaces as ERROR_PIPE_NOT_CONNECTED rather than EOF, so stop
-    // at the newline instead of reading to the end.
-    let mut buf = Vec::new();
-    let mut chunk = [0u8; 8192];
-    while !buf.contains(&b'\n') {
-        match pipe.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => buf.extend_from_slice(&chunk[..n]),
-            Err(_) if !buf.is_empty() => break,
-            Err(e) => return Err(format!("no response from TilingWindowsManager ({e})")),
-        }
-    }
-    let text = String::from_utf8_lossy(&buf);
-    serde_json::from_str(text.trim()).map_err(|e| format!("bad response: {e}"))
+    twm_core::ipc::call(&paths::pipe_name(), req)
 }
 
 fn print_table(rows: &[Vec<String>]) {
