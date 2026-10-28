@@ -45,7 +45,7 @@ class Ctx:
         self.data_dir = os.path.join(tmp, "data")
         os.makedirs(self.cfg_dir)
         os.makedirs(self.data_dir)
-        self.env = dict(os.environ, TWM_INSTANCE="e2e", TWM_CONFIG_DIR=self.cfg_dir, TWM_DATA_DIR=self.data_dir, TWM_NO_ACTIVATE="1", TWM_LOG="debug")
+        self.env = dict(os.environ, TWM_INSTANCE="e2e", TWM_CONFIG_DIR=self.cfg_dir, TWM_DATA_DIR=self.data_dir, TWM_NO_ACTIVATE="1", TWM_LOG="trace")
         self.daemon = None
         self.testwins = []
 
@@ -54,7 +54,7 @@ class Ctx:
         return os.path.join(self.cfg_dir, "config.toml")
 
     def ctl(self, *args, ok=True):
-        p = subprocess.run([os.path.join(self.bin, "twmctl.exe"), "--json", *args], env=self.env, capture_output=True, text=True, timeout=15)
+        p = subprocess.run([os.path.join(self.bin, "twmctl.exe"), "--json", *args], env=self.env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
         if ok and p.returncode != 0:
             raise AssertionError(f"twmctl {' '.join(args)} failed ({p.returncode}): {p.stderr.strip()}")
         return json.loads(p.stdout) if p.stdout.strip() else None

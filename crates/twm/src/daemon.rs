@@ -85,6 +85,8 @@ pub struct Daemon {
     dwm_touched: HashSet<WinId>,
     foreground: Option<WinId>,
     zoomed: HashSet<WinId>,
+    /// Placement of windows that existed before we started (restored on quit).
+    original: HashMap<WinId, WINDOWPLACEMENT>,
     start: Instant,
     frame_ms: f64,
     timer: HANDLE,
@@ -184,6 +186,7 @@ impl Daemon {
             dwm_touched: HashSet::new(),
             foreground: window::foreground(),
             zoomed: HashSet::new(),
+            original: HashMap::new(),
             start: Instant::now(),
             frame_ms: 1000.0 / hz.clamp(30, 360) as f64,
             timer,
@@ -260,6 +263,9 @@ impl Daemon {
             }
             let (f, c) = self.classify_window(id);
             if c.decision != Decision::Ignore {
+                if let Some(p) = window::placement(id) {
+                    self.original.insert(id, p);
+                }
                 self.prepare_window(id, f.maximized);
                 self.wm.add_window(f, &c, true);
             }
@@ -291,6 +297,7 @@ impl Daemon {
         self.tweens.remove(&id);
         self.enforce.remove(&id);
         self.zoomed.remove(&id);
+        self.original.remove(&id);
         if self.hidden.remove(&id) {
             recovery::mark_shown(id);
         }
@@ -398,6 +405,7 @@ impl Daemon {
         }
         // 3. Focus requested by an action.
         if let Some(f) = self.wm.take_focus_request() {
+            log::trace!("focus request {f:#x}");
             if window::foreground() != Some(f) {
                 window::focus(f);
             }
@@ -549,6 +557,9 @@ impl Daemon {
 
     fn on_event(&mut self, ev: Event) {
         self.stats.events += 1;
+        if !matches!(ev, Event::Location(_)) {
+            log::trace!("event {ev:?}");
+        }
         match ev {
             Event::Shown(id) | Event::Uncloaked(id) => {
                 if self.wm.windows.contains_key(&id) || self.hidden.contains(&id) || self.wm.paused {
@@ -575,6 +586,7 @@ impl Daemon {
                 }
             }
             Event::Foreground(id) => {
+                log::debug!("foreground {id:#x} {:?} ({})", window::title(id), window::class(id));
                 self.foreground = Some(id);
                 if !self.wm.windows.contains_key(&id) && !self.wm.paused && window::is_visible(id) {
                     self.try_manage(id, false);
@@ -760,6 +772,7 @@ impl Daemon {
     // ------------------------------------------------------------ actions
 
     pub fn run_action(&mut self, a: &Action) {
+        log::trace!("action {a:?}");
         let fx = self.wm.dispatch(a);
         let mut switch = None;
         for e in fx {
@@ -1024,6 +1037,16 @@ impl Daemon {
             window::show(id);
         }
         recovery::restore_all();
+        if self.wm.config().general.restore_on_exit {
+            let mut n = 0;
+            for (id, p) in &self.original {
+                if window::exists(*id) && self.wm.windows.contains_key(id) {
+                    window::set_placement(*id, p);
+                    n += 1;
+                }
+            }
+            log::info!("restored the original placement of {n} window(s)");
+        }
         for id in self.dwm_touched.drain() {
             if window::exists(id) {
                 window::set_border_color(id, window::DWM_COLOR_DEFAULT);

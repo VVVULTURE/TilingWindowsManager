@@ -175,7 +175,7 @@ fn hide(hwnd: HWND, ms: u64) {
         let was = ShowWindow(hwnd, SW_HIDE);
         println!("SW_HIDE prev-visible={} now-visible={}", was.as_bool(), IsWindowVisible(hwnd).as_bool());
         std::thread::sleep(std::time::Duration::from_millis(ms));
-        ShowWindow(hwnd, SW_SHOWNA);
+        let _ = ShowWindow(hwnd, SW_SHOWNA);
         println!("SW_SHOWNA now-visible={} still-a-window={}", IsWindowVisible(hwnd).as_bool(), IsWindow(Some(hwnd)).as_bool());
     }
 }

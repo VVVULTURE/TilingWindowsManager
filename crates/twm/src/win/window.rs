@@ -261,6 +261,24 @@ pub fn place_move(id: WinId, visual: Rect, offsets: (i32, i32, i32, i32)) -> boo
     unsafe { SetWindowPos(hwnd(id), None, visual.x - l, visual.y - t, 0, 0, flags).is_ok() }
 }
 
+/// Saved normal/maximized placement of a window.
+pub fn placement(id: WinId) -> Option<WINDOWPLACEMENT> {
+    let mut p = WINDOWPLACEMENT { length: std::mem::size_of::<WINDOWPLACEMENT>() as u32, ..Default::default() };
+    unsafe { GetWindowPlacement(hwnd(id), &mut p) }.ok().map(|_| p)
+}
+
+pub fn set_placement(id: WinId, p: &WINDOWPLACEMENT) {
+    let mut p = *p;
+    p.flags |= WPF_ASYNCWINDOWPLACEMENT;
+    // Never re-activate: restore minimized/normal windows without focus.
+    if p.showCmd == SW_SHOWNORMAL.0 as u32 || p.showCmd == SW_RESTORE.0 as u32 {
+        p.showCmd = SW_SHOWNOACTIVATE.0 as u32;
+    }
+    unsafe {
+        let _ = SetWindowPlacement(hwnd(id), &p);
+    }
+}
+
 pub fn hide(id: WinId) {
     unsafe {
         let _ = ShowWindowAsync(hwnd(id), SW_HIDE);
@@ -330,9 +348,15 @@ pub fn focus(id: WinId) -> bool {
         if SetForegroundWindow(h).as_bool() && GetForegroundWindow() == h {
             return true;
         }
+        // Not allowed to take the foreground (see SetForegroundWindow
+        // remarks): make this process the source of the last input event
+        // with an unassigned key, then retry.
         crate::win::keyboard::inject_mask_key();
-        let ok = SetForegroundWindow(h).as_bool();
-        ok && GetForegroundWindow() == h
+        let ok = SetForegroundWindow(h).as_bool() && GetForegroundWindow() == h;
+        if !ok {
+            log::debug!("could not activate {id:#x} (foreground is {:#x})", GetForegroundWindow().0 as usize);
+        }
+        ok
     }
 }
 

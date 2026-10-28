@@ -35,6 +35,12 @@ unsafe extern "system" fn wndproc(h: HWND, m: u32, wp: WPARAM, lp: LPARAM) -> LR
                 }
                 DefWindowProcW(h, m, wp, lp)
             }
+            WM_KEYDOWN | WM_SYSKEYDOWN => {
+                if let Some((f, t0)) = LOG.lock().unwrap().as_mut() {
+                    let _ = writeln!(f, "{:.3} {:#x} key {:#04x}", t0.elapsed().as_secs_f64() * 1000.0, h.0 as usize, wp.0);
+                }
+                DefWindowProcW(h, m, wp, lp)
+            }
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 let dc = BeginPaint(h, &mut ps);
@@ -129,12 +135,12 @@ fn main() {
             println!("hwnd={:#x}", h.0 as usize);
         }
         let _ = std::io::stdout().flush();
-        if let Some(ms) = lifetime {
-            SetTimer(None, 1, ms, None);
-        }
+        // Exit only on *our* timer: when a window gains keyboard focus the
+        // text input framework installs its own thread timers too.
+        let timer = lifetime.map(|ms| SetTimer(None, 0, ms, None)).unwrap_or(0);
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            if msg.message == WM_TIMER && msg.hwnd.is_invalid() {
+            if msg.message == WM_TIMER && msg.hwnd.is_invalid() && timer != 0 && msg.wParam.0 == timer {
                 break;
             }
             let _ = TranslateMessage(&msg);

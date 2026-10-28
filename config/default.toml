@@ -31,6 +31,7 @@ hide_method = "hide"        # how other workspaces are hidden: hide | minimize
 focus_new_windows = true
 mouse_follows_focus = false # move the cursor to windows focused by keyboard
 drag_to_swap = true         # drop a dragged tiled window onto another to swap
+restore_on_exit = true      # on quit, put pre-existing windows back where they were
 
 [decoration]
 border_style = "overlay"    # overlay (gradient ring) | dwm (native 1px border) | none

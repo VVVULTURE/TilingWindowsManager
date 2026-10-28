@@ -37,6 +37,9 @@ pub struct General {
     pub mouse_follows_focus: bool,
     /// Drag a tiled window onto another to swap them.
     pub drag_to_swap: bool,
+    /// On quit, put windows that existed before the manager started back
+    /// where they were (including maximized state).
+    pub restore_on_exit: bool,
 }
 
 impl Default for General {
@@ -53,6 +56,7 @@ impl Default for General {
             focus_new_windows: true,
             mouse_follows_focus: false,
             drag_to_swap: true,
+            restore_on_exit: true,
         }
     }
 }
