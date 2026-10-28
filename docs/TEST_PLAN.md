@@ -166,7 +166,7 @@ handles its 8 windows' requests on one thread. Not yet profiled further.
 | Reinstall over an existing install with `/TASKS=autostart` writes the HKCU Run value | Pass |
 | Silent uninstall removes the folder, shortcuts, Run value and uninstall entry; leaves no config behind (none existed) | Pass |
 | Portable zip: contains `portable` marker, paths resolve next to the exe, example config validates | Pass |
-| Upgrade over a **running** manager (quit → replace → restart) | Untested (would start the manager on the tester's real windows) |
+| Upgrade over a **running** manager (same-version reinstall, `/VERYSILENT`): installer asks the manager to quit, replaces the files, restarts it | Pass, 2026-10-28 — manager log: "shutting down" / "restored the original placement of 2 window(s)" at 19:32:44.8, files replaced without in-use errors, new instance started 19:32:46.9; then quit, silent uninstall left no install dir, uninstall key or Run value |
 | Interactive uninstall prompt "Also delete your configuration?" | Untested (silent mode answers No) |
 
 ## 6. Not yet verified (manual or hardware)

@@ -17,7 +17,6 @@ Still open:
    foreground on the test PC has been dismissed (see below).
 2. Hardware/manual scenarios in TEST_PLAN.md §6 (mixed DPI, hot-plug,
    sleep/resume, elevated-focus key behaviour).
-3. Upgrade over a running manager through the installer.
 
 ## 2026-10-27 — research, core, daemon
 
