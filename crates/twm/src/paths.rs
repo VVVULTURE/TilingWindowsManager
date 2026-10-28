@@ -4,9 +4,19 @@
 
 use std::path::PathBuf;
 
-fn env_dir(var: &str, base: &str) -> PathBuf {
+/// Portable mode: a file named `portable` next to the executables keeps
+/// configuration and data in `config\` and `data\` beside them.
+pub fn portable_dir() -> Option<PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    dir.join("portable").is_file().then_some(dir)
+}
+
+fn env_dir(var: &str, base: &str, portable_sub: &str) -> PathBuf {
     if let Some(d) = std::env::var_os(var) {
         return PathBuf::from(d);
+    }
+    if let Some(p) = portable_dir() {
+        return p.join(portable_sub);
     }
     let base = std::env::var_os(base).map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
     base.join("TilingWindowsManager")
@@ -14,12 +24,12 @@ fn env_dir(var: &str, base: &str) -> PathBuf {
 
 /// %APPDATA%\TilingWindowsManager — config.toml and themes\.
 pub fn config_dir() -> PathBuf {
-    env_dir("TWM_CONFIG_DIR", "APPDATA")
+    env_dir("TWM_CONFIG_DIR", "APPDATA", "config")
 }
 
 /// %LOCALAPPDATA%\TilingWindowsManager — logs and crash-recovery state.
 pub fn data_dir() -> PathBuf {
-    env_dir("TWM_DATA_DIR", "LOCALAPPDATA")
+    env_dir("TWM_DATA_DIR", "LOCALAPPDATA", "data")
 }
 
 pub fn default_config_file() -> PathBuf {

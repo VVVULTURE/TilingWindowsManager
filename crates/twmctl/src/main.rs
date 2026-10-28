@@ -29,6 +29,7 @@ Commands that talk to the running manager:
 Commands that work without the manager:
   validate [file]        check a configuration file (default: your config)
   restore                show windows a crashed instance left hidden
+  reset-config           replace your config with the default (old file kept as a backup)
   paths                  print the configuration, log and recovery paths
 ";
 
@@ -80,6 +81,21 @@ fn pretty(cmd: &str, data: &Value) {
             }
             print_table(&rows);
         }
+        "explain" => {
+            let f = &data["facts"];
+            let c = &data["classification"];
+            println!("window {:#x}  {}  class {}  title {}", f["hwnd"].as_u64().unwrap_or(0), s(&f["process"]), f["class"], f["title"]);
+            let managed = match data["managed"].as_object() {
+                Some(m) => format!("managed: workspace {}, {}", m["ws"], s(&m["mode"])),
+                None => "not managed".to_string(),
+            };
+            println!("decision: {} ({managed})", s(&c["decision"]));
+            for r in c["reasons"].as_array().into_iter().flatten() {
+                println!("  - {}", s(r));
+            }
+            let rules: Vec<String> = c["matched_rules"].as_array().into_iter().flatten().map(s).collect();
+            println!("matched rules: {}", if rules.is_empty() { "none".to_string() } else { rules.join(", ") });
+        }
         "binds" => {
             println!("keyboard backend: {}", s(&data["backend"]));
             let mut rows = vec![vec!["CHORD".into(), "ACTION".into(), "STATUS".into()]];
@@ -123,6 +139,30 @@ fn validate(path: Option<String>) -> i32 {
     let warnings = r.diagnostics.len() - errors;
     println!("{}: {errors} error(s), {warnings} warning(s), {} binding(s), {} rule(s)", path.display(), r.config.binds.len(), r.config.rules.len());
     i32::from(errors > 0)
+}
+
+fn reset_config() -> i32 {
+    let path = paths::default_config_file();
+    if path.exists() {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let backup = path.with_extension(format!("toml.{secs}.bak"));
+        if let Err(e) = std::fs::copy(&path, &backup) {
+            eprintln!("error: could not back up {}: {e}; nothing changed", path.display());
+            return 1;
+        }
+        println!("backed up {} -> {}", path.display(), backup.display());
+    }
+    let r = path.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::write(&path, twm_core::config::DEFAULT_CONFIG));
+    match r {
+        Ok(()) => {
+            println!("wrote the default configuration to {} (a running manager reloads it)", path.display());
+            0
+        }
+        Err(e) => {
+            eprintln!("error: could not write {}: {e}", path.display());
+            1
+        }
+    }
 }
 
 fn restore() -> i32 {
@@ -179,6 +219,7 @@ fn main() {
     let req = match cmd.as_str() {
         "validate" => std::process::exit(validate(rest.first().cloned())),
         "restore" => std::process::exit(restore()),
+        "reset-config" => std::process::exit(reset_config()),
         "paths" => {
             println!("config:   {}\nthemes:   {}\nlog:      {}\nrecovery: {}\npipe:     {}", paths::default_config_file().display(), paths::themes_dir().display(), paths::log_file().display(), paths::recovery_file().display(), paths::pipe_name());
             return;

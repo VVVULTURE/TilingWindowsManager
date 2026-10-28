@@ -252,7 +252,7 @@ pub fn classify(f: &WindowFacts, rules: &[Rule], opts: &ClassifyOptions) -> Clas
         heuristic(Decision::Float, "the window manager's settings window".into(), &mut c.reasons);
     }
     if !opts.manage_by_default {
-        heuristic(Decision::Ignore, "general.manage_by_default = false and no rule enables it".into(), &mut c.reasons);
+        heuristic(Decision::Ignore, "general.manage_by_default = false (a rule can enable it)".into(), &mut c.reasons);
     }
     c.decision = decision;
 

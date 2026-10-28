@@ -69,8 +69,19 @@ fn main() {
         default_hook(info);
     }));
 
+    let explicit = config.is_some();
     let config = config.unwrap_or_else(paths::default_config_file);
     log::info!("TilingWindowsManager {} starting; config {}", env!("CARGO_PKG_VERSION"), config.display());
+    // First run: write the commented default so "Edit config" and the
+    // settings window have a file to open. Never overwrites, and never
+    // creates a file the user named explicitly with --config.
+    if !explicit && !config.exists() {
+        let r = config.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::write(&config, twm_core::config::DEFAULT_CONFIG));
+        match r {
+            Ok(()) => log::info!("created default configuration {}", config.display()),
+            Err(e) => log::warn!("could not create {}: {e}; using built-in defaults", config.display()),
+        }
+    }
     let mut d = match daemon::Daemon::new(config) {
         Ok(d) => d,
         Err(e) => fatal(&format!("could not start: {e}")),
