@@ -138,7 +138,20 @@ impl Wm {
     /// Applies a new configuration. Layout kinds of existing workspaces are
     /// kept; spacing, borders and rules take effect immediately.
     pub fn set_config(&mut self, cfg: Config) {
+        let ids: Vec<u32> = self.workspaces.keys().copied().collect();
+        let before: Vec<LayoutKind> = ids.iter().map(|id| self.ws_rule_layout(*id)).collect();
         self.cfg = cfg;
+        // A changed configured layout applies to existing workspaces; one
+        // picked at runtime (`layout next`) survives unrelated reloads.
+        for (id, old) in ids.into_iter().zip(before) {
+            let new = self.ws_rule_layout(id);
+            if new != old && self.workspaces[&id].layout.kind() != new {
+                let area = self.tiling_area(id);
+                let opts = self.cfg.layout_options();
+                let w = self.workspaces.get_mut(&id).unwrap();
+                w.layout = w.layout.convert(new, area, &opts);
+            }
+        }
         for ws in self.workspaces.values_mut() {
             if let Layout::Master(m) = &mut ws.layout {
                 m.mfact = self.cfg.master.mfact;
@@ -299,7 +312,9 @@ impl Wm {
         }
         if !adopting && self.cfg.general.focus_new_windows && !minimized {
             if self.is_visible_ws(ws) {
-                self.focus_window(id, false);
+                // Request activation too: a window shown without activating
+                // itself would otherwise be "focused" here but not in Windows.
+                self.focus_window(id, true);
             } else {
                 self.workspaces.get_mut(&ws).unwrap().last_focus = Some(id);
             }
@@ -1181,6 +1196,28 @@ mod tests {
         // The user restoring it themselves (taskbar, minimize hiding) switches.
         wm.on_focus(Some(2), true);
         assert_eq!(wm.active_ws(), 4);
+    }
+
+    #[test]
+    fn changing_configured_layout_applies_to_existing_workspaces() {
+        let cfg = |layout: &str| load_str(&format!("[general]\nlayout = \"{layout}\"\ngaps_in = 0\ngaps_out = 0\nborder_size = 0\n"), "t", None, &|_| None).config;
+        let mut wm = Wm::new(cfg("dwindle"), vec![mon("A", 0, 1600, 900)]);
+        add(&mut wm, 1);
+        add(&mut wm, 2);
+        wm.set_config(cfg("master"));
+        assert_eq!(wm.workspaces[&1].layout.kind(), LayoutKind::Master);
+        // A runtime choice is kept when the configured layout did not change.
+        wm.dispatch(&Action::SetLayout(LayoutKind::Monocle));
+        wm.set_config(cfg("master"));
+        assert_eq!(wm.workspaces[&1].layout.kind(), LayoutKind::Monocle);
+    }
+
+    #[test]
+    fn new_window_requests_activation() {
+        let mut wm = one();
+        add(&mut wm, 1);
+        assert_eq!(wm.focused, Some(1));
+        assert_eq!(wm.take_focus_request(), Some(1), "Windows must be asked to activate it too");
     }
 
     #[test]

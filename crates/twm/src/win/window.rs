@@ -331,6 +331,12 @@ pub fn foreground() -> Option<WinId> {
     (!h.is_invalid()).then(|| id(h))
 }
 
+/// The desktop window owned by Explorer (Progman), if there is one.
+pub fn shell_window() -> Option<WinId> {
+    let h = unsafe { GetShellWindow() };
+    (!h.is_invalid()).then(|| id(h))
+}
+
 /// Brings a window to the foreground. Windows only lets a process do this
 /// under documented conditions (see SetForegroundWindow remarks); the
 /// keyboard binding that triggered us normally satisfies "received the last

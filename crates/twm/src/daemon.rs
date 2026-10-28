@@ -80,6 +80,8 @@ pub struct Daemon {
     tweens: HashMap<WinId, Tween>,
     /// Interactive move/size in progress: (window, frame at start).
     moving: Option<(WinId, Rect)>,
+    /// Window to activate as soon as its asynchronous show completes.
+    pending_focus: Option<(WinId, Instant)>,
     enforce: HashMap<WinId, Enforce>,
     /// Windows we recoloured/re-cornered through DWM (reset on exit).
     dwm_touched: HashSet<WinId>,
@@ -98,8 +100,8 @@ pub struct Daemon {
     stats: Stats,
 }
 
-fn theme_lookup(name: &str) -> Option<String> {
-    std::fs::read_to_string(paths::themes_dir().join(format!("{name}.toml"))).ok()
+fn theme_lookup(name: &str) -> Option<(String, String)> {
+    config::theme_file_lookup(&paths::themes_dir(), name)
 }
 
 pub fn load_config(path: &PathBuf, fallback: Option<&Config>) -> LoadReport {
@@ -182,6 +184,7 @@ impl Daemon {
             fades: HashMap::new(),
             tweens: HashMap::new(),
             moving: None,
+            pending_focus: None,
             enforce: HashMap::new(),
             dwm_touched: HashSet::new(),
             foreground: window::foreground(),
@@ -324,7 +327,18 @@ impl Daemon {
         let cfg = self.wm.config().clone();
         let hide_min = cfg.general.hide_method == "minimize";
 
-        // 1. Hide windows of inactive workspaces.
+        // 1. Hide windows of inactive workspaces. Hiding the foreground
+        // window makes Windows activate whatever is next in z-order: a window
+        // on another monitor (the focused monitor would follow it) or a
+        // topmost notification toast, from which we cannot take the
+        // foreground back. Park focus on the desktop first (like Win+D);
+        // step 3 then activates the window that should have focus.
+        if let (Some(fg), Some(desk)) = (window::foreground(), window::shell_window()) {
+            if d.hidden.contains(&fg) && !self.hidden.contains(&fg) {
+                log::trace!("hiding foreground {fg:#x}: focusing the desktop first");
+                window::focus(desk);
+            }
+        }
         for id in &d.hidden {
             if self.hidden.insert(*id) {
                 self.tweens.remove(id);
@@ -406,7 +420,12 @@ impl Daemon {
         // 3. Focus requested by an action.
         if let Some(f) = self.wm.take_focus_request() {
             log::trace!("focus request {f:#x}");
-            if window::foreground() != Some(f) {
+            self.pending_focus = None;
+            if !window::is_visible(f) {
+                // Shown with ShowWindowAsync and not visible yet: Windows
+                // refuses to activate it now. Activate it on its Shown event.
+                self.pending_focus = Some((f, Instant::now()));
+            } else if window::foreground() != Some(f) {
                 window::focus(f);
             }
             if cfg.general.mouse_follows_focus {
@@ -562,6 +581,12 @@ impl Daemon {
         }
         match ev {
             Event::Shown(id) | Event::Uncloaked(id) => {
+                if self.pending_focus.is_some_and(|(p, _)| p == id) {
+                    self.pending_focus = None;
+                    if window::foreground() != Some(id) {
+                        window::focus(id);
+                    }
+                }
                 if self.wm.windows.contains_key(&id) || self.hidden.contains(&id) || self.wm.paused {
                     return;
                 }
@@ -588,6 +613,16 @@ impl Daemon {
             Event::Foreground(id) => {
                 log::debug!("foreground {id:#x} {:?} ({})", window::title(id), window::class(id));
                 self.foreground = Some(id);
+                if let Some((p, since)) = self.pending_focus {
+                    if p != id && since.elapsed() < Duration::from_millis(1000) {
+                        // Windows picked a stand-in while the window we are
+                        // about to activate is still being shown; following
+                        // it could move focus to another monitor.
+                        log::trace!("ignoring interim foreground {id:#x} (activating {p:#x})");
+                        return;
+                    }
+                    self.pending_focus = None;
+                }
                 if !self.wm.windows.contains_key(&id) && !self.wm.paused && window::is_visible(id) {
                     self.try_manage(id, false);
                 }

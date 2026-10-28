@@ -456,9 +456,16 @@ fn check_choice(ctx: &mut Ctx, setting: &str, v: &mut String, choices: &[&str], 
     }
 }
 
+/// Theme lookup for [`load_str`] that reads `<dir>/<name>.toml`.
+pub fn theme_file_lookup(dir: &std::path::Path, name: &str) -> Option<(String, String)> {
+    let p = dir.join(format!("{name}.toml"));
+    std::fs::read_to_string(&p).ok().map(|t| (t, p.display().to_string()))
+}
+
 /// Parses `src` as a configuration. `theme_lookup` resolves a theme name to
-/// its TOML text (user theme directory first, then built-ins).
-pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: &dyn Fn(&str) -> Option<String>) -> LoadReport {
+/// its TOML text and a file name for diagnostics (user theme directory
+/// first, then built-ins).
+pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: &dyn Fn(&str) -> Option<(String, String)>) -> LoadReport {
     let mut ctx = Ctx { file, src, diags: Vec::new() };
     let table: toml::Table = match src.parse::<toml::Table>() {
         Ok(t) => t,
@@ -491,11 +498,25 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         }
     };
     let mut theme_table = toml::Table::new();
+    let mut theme_src: Option<(String, String)> = None;
     if let Some(name) = &theme {
-        match theme_lookup(name).or_else(|| BUILTIN_THEMES.iter().find(|(n, _)| n == name).map(|(_, s)| s.to_string())) {
-            Some(text) => match text.parse::<toml::Table>() {
-                Ok(t) => theme_table = t,
-                Err(e) => ctx.err("theme", format!("theme `{name}` has a syntax error: {}", e.message().trim())),
+        let builtin = || BUILTIN_THEMES.iter().find(|(n, _)| n == name).map(|(_, s)| (s.to_string(), format!("<built-in theme {name}>")));
+        match theme_lookup(name).or_else(builtin) {
+            Some((text, origin)) => match text.parse::<toml::Table>() {
+                Ok(t) => {
+                    theme_table = t;
+                    theme_src = Some((text, origin));
+                }
+                Err(e) => {
+                    let line = e.span().map(|s| line_of(&text, s.start));
+                    ctx.diags.push(Diagnostic {
+                        severity: Severity::Error,
+                        file: origin,
+                        line,
+                        setting: "<syntax>".into(),
+                        message: format!("theme `{name}` has a syntax error: {} — theme not applied", e.message().trim()),
+                    });
+                }
             },
             None => {
                 let names: Vec<&str> = BUILTIN_THEMES.iter().map(|(n, _)| *n).collect();
@@ -504,8 +525,12 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         }
     }
     let mut deco_table = toml::Table::new();
+    // Decoration keys whose value comes from the theme file (not overridden).
+    let mut from_theme: Vec<String> = Vec::new();
     if let Some(toml::Value::Table(t)) = theme_table.get("decoration") {
         deco_table.extend(t.clone());
+        let user = table.get("decoration").and_then(|v| v.as_table());
+        from_theme = t.keys().filter(|k| !user.is_some_and(|u| u.contains_key(*k))).cloned().collect();
     }
     if let Some(toml::Value::Table(t)) = table.get("decoration") {
         deco_table.extend(t.clone());
@@ -745,6 +770,17 @@ pub fn load_str(src: &str, file: &str, fallback: Option<&Config>, theme_lookup: 
         monitors,
         default_layout,
     };
+    // Problems with values taken from the theme point at the theme file.
+    if let (Some((text, origin)), Some(name)) = (&theme_src, &config.theme) {
+        for d in &mut ctx.diags {
+            let key = d.setting.strip_prefix("decoration.").map(|k| k.split(['.', '[']).next().unwrap_or(k));
+            if key.is_some_and(|k| from_theme.iter().any(|t| t == k)) {
+                d.file = origin.clone();
+                d.line = find_key_line(text, &d.setting);
+                d.message = format!("{} (from theme `{name}`)", d.message);
+            }
+        }
+    }
     LoadReport { config, diagnostics: ctx.diags, used_fallback: false }
 }
 
@@ -847,6 +883,21 @@ mod tests {
         assert_eq!(r.config.rules[0].name, "calc");
         assert_eq!(r.errors().count(), 2);
         assert!(r.diagnostics.iter().any(|d| d.setting == "rule[3].flaot" && d.severity == Severity::Warning));
+    }
+
+    #[test]
+    fn theme_errors_name_the_theme_file() {
+        let lookup = |_: &str| Some(("[decoration]\nrounding = 4\nactive_border = \"rgba(nothex)\"\n".to_string(), "themes/bad.toml".to_string()));
+        let r = load_str("theme = \"bad\"\n", "config.toml", None, &lookup);
+        let d = r.errors().find(|d| d.setting == "decoration.active_border").expect("error reported");
+        assert_eq!((d.file.as_str(), d.line), ("themes/bad.toml", Some(3)));
+        assert!(d.message.contains("from theme `bad`"));
+        // Overridden in the user's file: the error belongs to config.toml.
+        let r = load_str("theme = \"bad\"\n[decoration]\nactive_border = \"zz\"\n", "config.toml", None, &lookup);
+        let d = r.errors().find(|d| d.setting == "decoration.active_border").unwrap();
+        assert_eq!((d.file.as_str(), d.line), ("config.toml", Some(3)));
+        let r = load_str("theme = \"bad\"\n", "config.toml", None, &|_| Some(("[decoration\n".into(), "themes/bad.toml".into())));
+        assert!(r.errors().any(|d| d.file == "themes/bad.toml" && d.line == Some(1)));
     }
 
     #[test]

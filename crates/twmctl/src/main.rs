@@ -131,7 +131,7 @@ fn validate(path: Option<String>) -> i32 {
         }
     };
     let themes = paths::themes_dir();
-    let r = twm_core::config::load_str(&text, &path.display().to_string(), None, &|n| std::fs::read_to_string(themes.join(format!("{n}.toml"))).ok());
+    let r = twm_core::config::load_str(&text, &path.display().to_string(), None, &|n| twm_core::config::theme_file_lookup(&themes, n));
     for d in &r.diagnostics {
         println!("{d}");
     }

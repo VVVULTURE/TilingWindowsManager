@@ -51,7 +51,7 @@ const ERR: Color32 = Color32::from_rgb(235, 90, 90);
 
 fn validate(text: &str, path: &Path) -> LoadReport {
     let themes = paths::themes_dir();
-    config::load_str(text, &path.display().to_string(), None, &|n| std::fs::read_to_string(themes.join(format!("{n}.toml"))).ok())
+    config::load_str(text, &path.display().to_string(), None, &|n| config::theme_file_lookup(&themes, n))
 }
 
 fn stamp(p: &Path) -> Option<(SystemTime, u64)> {
