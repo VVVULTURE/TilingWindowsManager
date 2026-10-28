@@ -72,7 +72,7 @@ default binding off the Windows key.
 
 | Option | Default | Range / values | |
 |---|---|---|---|
-| `layout` | `"dwindle"` | `dwindle`, `master`, `monocle` | Layout of new workspaces. |
+| `layout` | `"dwindle"` | `dwindle`, `master`, `monocle` | Layout of workspaces. Changing it (or a `[[workspace]]` layout) converts existing workspaces when the file is reloaded; a layout chosen with the `layout` action is kept until the configured value changes. |
 | `gaps_in` | `5` | 0–200 px | Gap around each window; neighbours are `2 × gaps_in` apart. |
 | `gaps_out` | `12` | 0–400 px | Gap between windows and the monitor's work area edge. |
 | `border_size` | `2` | 0–20 px | Width of the overlay border ring. |
@@ -80,7 +80,7 @@ default binding off the Windows key.
 | `float_unresizable` | `true` | | Windows without a resize frame float. |
 | `float_dialogs` | `true` | | Owned windows (dialogs) float. |
 | `hide_method` | `"hide"` | `hide`, `minimize` | How windows on inactive workspaces are hidden. `hide` removes them from the taskbar too; `minimize` keeps taskbar buttons. |
-| `focus_new_windows` | `true` | | Give focus to newly managed windows. |
+| `focus_new_windows` | `true` | | Give focus to newly managed windows (the manager also asks Windows to activate them). |
 | `focus_on_activate` | `false` | | When a window on a hidden workspace activates itself (e.g. an app finishing loading), switch to that workspace (`true`), or stay and give focus back to the visible window (`false`, Hyprland's default). With `hide_method = "minimize"`, restoring a window from its taskbar button always switches. |
 | `mouse_follows_focus` | `false` | | Move the pointer to windows focused with the keyboard. |
 | `drag_to_swap` | `true` | | Dropping a dragged tiled window on another one swaps them. |

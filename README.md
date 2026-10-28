@@ -166,8 +166,22 @@ the next start (or with `twmctl restore`).
   has focus, key bindings may not work (expected from UIPI, not yet verified).
 - Some applications enforce their own size or position; after repeated
   conflicts the manager stops fighting and logs it.
-- Mixed-DPI monitor setups, sleep/resume and display hot-plug are implemented
-  but have not yet been verified on real hardware (see the test plan).
+- Windows enforces a minimum size for most windows (about 122 px wide for a
+  normal titled window; more for many apps, e.g. Notepad 322×197). When a
+  tile is smaller than that, the window overflows its tile. Use fewer
+  windows per workspace, the master layout, or a float rule for such apps.
+- Border strips sit directly below their window in z-order, so the window's
+  own drop shadow darkens the border slightly (measured: 2–8 % on a 2 px
+  border).
+- Windows decides which window gets the keyboard focus when one closes. If
+  you close the last window on a monitor, Windows may focus a window on
+  another monitor, and the manager follows it (new windows then open there).
+- While a Windows notification toast holds the keyboard focus, Windows
+  refuses to let the manager activate windows (observed; a click anywhere
+  ends it). The manager no longer hands focus to toasts itself.
+- Mixed-DPI monitor setups, sleep/resume and monitor hot-plug are implemented
+  but have not yet been verified on real hardware. A resolution change was
+  verified (see the test plan).
 - No per-window opacity, blur, shadows or window open/close animations
   (not implemented).
 

@@ -103,3 +103,29 @@ Users must be able to stop the manager and get their desktop back.
 `WINDOWPLACEMENT` when it is first managed and restores it on quit, along
 with showing all hidden windows and resetting DWM attributes the manager
 changed.
+
+## D13. Keyboard focus follows Windows, with three guards
+
+Windows owns the foreground window; `SetForegroundWindow` only succeeds under
+the conditions in its documentation. The manager's notion of focus follows
+`EVENT_SYSTEM_FOREGROUND`, with three guards found in real-desktop testing:
+
+1. **A hidden window activating itself does not switch workspace** (Notepad
+   does this about 1 s after start). Like Hyprland's `misc:focus_on_activate`
+   (default false), `general.focus_on_activate = false` gives focus back to
+   the visible workspace. Restoring a window from the taskbar with
+   `hide_method = "minimize"` still switches.
+2. **Hiding the foreground window parks focus on the desktop first**
+   (`GetShellWindow`, like Win+D). Otherwise Windows activates whatever is
+   next in z-order — a window on another monitor (the focused monitor would
+   follow, and new windows would open there) or a topmost notification toast,
+   from which no unprivileged program could take the foreground back in
+   testing.
+3. **Activation waits for asynchronous shows.** Windows on a newly shown
+   workspace appear via `ShowWindowAsync` (D8). Activating one before its own
+   thread has shown it fails, so the manager activates it on its
+   `EVENT_OBJECT_SHOW` and ignores interim foreground changes (up to 1 s).
+
+`focus_new_windows` asks Windows to activate the new window; before this,
+only internal focus moved, and borders and key bindings disagreed about which
+window was focused when an app opened a window without activating it.

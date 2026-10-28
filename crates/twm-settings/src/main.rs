@@ -617,7 +617,7 @@ impl App {
         let c = self.cfg().clone();
         Self::section(ui, "Layout");
         Self::grid("layout").show(ui, |ui| {
-            self.choice(ui, &["general", "layout"], "Default layout", "Layout for new workspaces. Each workspace can switch layout with the `layout` action.", &c.general.layout, &[("dwindle", "Dwindle (binary splits)"), ("master", "Master and stack"), ("monocle", "Monocle (one at a time)")]);
+            self.choice(ui, &["general", "layout"], "Default layout", "Layout of every workspace; changing it re-arranges open workspaces. Each workspace can still switch layout with the `layout` action.", &c.general.layout, &[("dwindle", "Dwindle (binary splits)"), ("master", "Master and stack"), ("monocle", "Monocle (one at a time)")]);
         });
         Self::section(ui, "Dwindle");
         Self::grid("dwindle").show(ui, |ui| {
