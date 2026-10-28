@@ -1,0 +1,5 @@
+# Minimal: a thin solid accent around the focused window only.
+[decoration]
+active_border = "rgba(e0e0e0ff)"
+inactive_border = "rgba(00000000)"
+inactive_borders = false

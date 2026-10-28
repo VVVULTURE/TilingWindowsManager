@@ -1,0 +1,170 @@
+# TilingWindowsManager configuration
+#
+# Location: %APPDATA%\TilingWindowsManager\config.toml
+# The manager reloads this file automatically when it is saved. If a value
+# is invalid, that value (or section) falls back to its default and the
+# problem is shown in the tray notification and in `twmctl validate`.
+# A syntax error keeps the last working configuration.
+#
+# Full reference: docs/CONFIGURATION.md
+
+# Colour theme for borders. Built-in: hypr, catppuccin-mocha, nord,
+# gruvbox, rose-pine, minimal. Custom themes are read from
+# %APPDATA%\TilingWindowsManager\themes\<name>.toml. Values in
+# [decoration] below override the theme.
+theme = "hypr"
+
+[variables]
+# `$mod` and other variables can be used in key chords and actions.
+mod = "win"
+terminal = "wt.exe"
+
+[general]
+layout = "dwindle"          # dwindle | master | monocle
+gaps_in = 5                 # px around each window (2x between neighbours)
+gaps_out = 12               # px between windows and the screen edge
+border_size = 2             # border thickness in px (overlay style)
+manage_by_default = true    # false = only windows enabled by a [[rule]] are managed
+float_unresizable = true    # windows without a resize frame float
+float_dialogs = true        # owned windows (dialogs) float
+hide_method = "hide"        # how other workspaces are hidden: hide | minimize
+focus_new_windows = true
+mouse_follows_focus = false # move the cursor to windows focused by keyboard
+drag_to_swap = true         # drop a dragged tiled window onto another to swap
+
+[decoration]
+border_style = "overlay"    # overlay (gradient ring) | dwm (native 1px border) | none
+rounding = 8                # overlay ring corner radius (Windows 11 uses 8)
+corner_preference = "default" # default | round | small | square (Windows 11 corners)
+inactive_borders = true
+# active_border = "rgba(33ccffee) rgba(00ff99ee) 45deg"   # set by the theme
+# inactive_border = "rgba(595959aa)"
+
+[animations]
+enabled = true
+
+[animations.bezier]
+# name = [x1, y1, x2, y2]  (CSS cubic-bezier control points)
+smooth = [0.05, 0.9, 0.1, 1.0]
+easeOutQuint = [0.23, 1.0, 0.32, 1.0]
+linear = [0.0, 0.0, 1.0, 1.0]
+
+[animations.windows]        # windows moving/resizing between tiles
+enabled = true
+duration = 180              # milliseconds
+curve = "smooth"
+
+[animations.workspaces]     # workspace switching
+enabled = true
+duration = 220
+curve = "smooth"
+style = "slide"             # slide | slidevert | none
+
+[animations.border]         # border colour fade on focus change
+enabled = true
+duration = 150
+curve = "linear"
+
+[dwindle]
+split_width_multiplier = 1.0  # wide screens: raise to split side-by-side more often
+default_split_ratio = 1.0     # 1.0 = 50/50 (range 0.1 - 1.9)
+preserve_split = false        # keep split direction when the container changes shape
+force_split = 0               # 0/2 = new window right/bottom, 1 = left/top
+
+[master]
+mfact = 0.55                # master area fraction
+orientation = "left"        # left | right | top | bottom | center
+new_status = "slave"        # master | slave | inherit
+new_on_top = false
+
+[input]
+# hook   = low-level keyboard hook; Win-key bindings work and override
+#          Windows shortcuts that use the same chords.
+# hotkey = RegisterHotKey; no hook, but chords the shell already owns
+#          (e.g. win+1, win+left) cannot be registered — use alt-based binds.
+keyboard_backend = "hook"
+
+[binds]
+# "chord" = "action". Modifiers: win, ctrl, alt, shift. See
+# docs/CONFIGURATION.md for keys and actions. Win+L (lock) cannot be bound.
+"$mod+return" = "exec $terminal"
+"$mod+c" = "close"
+"$mod+v" = "togglefloating"
+"$mod+f" = "fullscreen"
+"$mod+j" = "togglesplit"
+"$mod+backslash" = "layout next"
+"$mod+shift+backslash" = "orientationnext"
+"$mod+shift+return" = "swapwithmaster"
+"$mod+shift+r" = "reload"
+"$mod+shift+t" = "togglepause"
+"$mod+f1" = "settings"
+"$mod+shift+f1" = "openconfig"
+"$mod+shift+escape" = "quit"
+
+"$mod+left" = "focus left"
+"$mod+right" = "focus right"
+"$mod+up" = "focus up"
+"$mod+down" = "focus down"
+"$mod+shift+left" = "move left"
+"$mod+shift+right" = "move right"
+"$mod+shift+up" = "move up"
+"$mod+shift+down" = "move down"
+"$mod+alt+left" = "resize left"
+"$mod+alt+right" = "resize right"
+"$mod+alt+up" = "resize up"
+"$mod+alt+down" = "resize down"
+
+"$mod+1" = "workspace 1"
+"$mod+2" = "workspace 2"
+"$mod+3" = "workspace 3"
+"$mod+4" = "workspace 4"
+"$mod+5" = "workspace 5"
+"$mod+6" = "workspace 6"
+"$mod+7" = "workspace 7"
+"$mod+8" = "workspace 8"
+"$mod+9" = "workspace 9"
+"$mod+0" = "workspace 10"
+"$mod+shift+1" = "movetoworkspace 1"
+"$mod+shift+2" = "movetoworkspace 2"
+"$mod+shift+3" = "movetoworkspace 3"
+"$mod+shift+4" = "movetoworkspace 4"
+"$mod+shift+5" = "movetoworkspace 5"
+"$mod+shift+6" = "movetoworkspace 6"
+"$mod+shift+7" = "movetoworkspace 7"
+"$mod+shift+8" = "movetoworkspace 8"
+"$mod+shift+9" = "movetoworkspace 9"
+"$mod+shift+0" = "movetoworkspace 10"
+"$mod+bracketleft" = "workspace prev"
+"$mod+bracketright" = "workspace next"
+"$mod+grave" = "workspace previous"
+"$mod+comma" = "focusmonitor prev"
+"$mod+period" = "focusmonitor next"
+"$mod+shift+comma" = "movetomonitor prev"
+"$mod+shift+period" = "movetomonitor next"
+
+# Per-application rules. `match` patterns are regular expressions that must
+# match the whole value; `process` is case-insensitive. Effects: manage,
+# float, workspace, monitor, border, size = [w, h], center.
+# Use `twmctl windows` to see the process/class/title of open windows and
+# `twmctl explain <hwnd>` to see which rules apply.
+
+[[rule]]
+name = "Picture-in-picture players float"
+match = { title = "(?i).*picture.in.picture.*" }
+float = true
+
+[[rule]]
+name = "Calculator floats"
+match = { class = "ApplicationFrameWindow", title = "Calculator" }
+float = true
+
+# [[rule]]
+# name = "Spotify on workspace 9"
+# match = { process = "spotify\\.exe" }
+# workspace = 9
+
+# Workspace rules: pin a workspace to a monitor and/or give it a layout.
+# [[workspace]]
+# id = 1
+# monitor = 1
+# layout = "master"

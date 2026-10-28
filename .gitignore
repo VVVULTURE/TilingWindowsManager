@@ -1,0 +1,22 @@
+# Rust build output
+/target/
+**/target/
+
+# Packaging output
+/dist/
+
+# Local notes and editor/OS state
+/prompt.txt
+.vs/
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# Never commit local configs, logs or secrets
+*.log
+*.pdb
+.env
+*.pfx
+*.key

@@ -1,0 +1,4 @@
+# Catppuccin Mocha (https://catppuccin.com) — mauve to blue.
+[decoration]
+active_border = "rgba(cba6f7ff) rgba(89b4faff) 45deg"
+inactive_border = "rgba(45475acc)"

@@ -1,0 +1,4 @@
+# Gruvbox — warm yellow to orange.
+[decoration]
+active_border = "rgba(fabd2fff) rgba(fe8019ff) 45deg"
+inactive_border = "rgba(504945cc)"

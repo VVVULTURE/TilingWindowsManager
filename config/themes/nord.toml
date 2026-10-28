@@ -1,0 +1,4 @@
+# Nord (https://www.nordtheme.com) — frost blues.
+[decoration]
+active_border = "rgba(88c0d0ff) rgba(81a1c1ff) 45deg"
+inactive_border = "rgba(4c566acc)"
