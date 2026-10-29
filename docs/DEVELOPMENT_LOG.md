@@ -7,15 +7,12 @@ fixed. Test results are in [TEST_PLAN.md](TEST_PLAN.md).
 
 Done and tested: core, daemon, `twmctl`, settings window, packaging
 (portable zip + per-user installer), documentation, the interactive suite
-(9/9) and a real-desktop run with the default configuration (10/10 on the
-build before the last focus changes). See TEST_PLAN.md for exact results.
+(9/9 on the current code) and the real-desktop run with the default configuration (11/11 on the current code,
+run C). See TEST_PLAN.md for exact results. Released as v0.1.0.
 
 Still open:
 
-1. Re-run `tests/e2e/real_desktop.py` and `tests/e2e/interactive.py` on
-   commit `469f580` or later, once the notification toast that holds the
-   foreground on the test PC has been dismissed (see below).
-2. Hardware/manual scenarios in TEST_PLAN.md §6 (mixed DPI, hot-plug,
+1. Hardware/manual scenarios in TEST_PLAN.md §6 (mixed DPI, hot-plug,
    sleep/resume, elevated-focus key behaviour).
 
 ## 2026-10-27 — research, core, daemon
@@ -156,3 +153,21 @@ monitors (TEST_PLAN.md §4b).
   call per poll (each `twmctl` start costs ~11 ms), and truncating a message
   before the part being checked. A Windows notification appearing during a
   run is reported as interference, not counted as a pass.
+
+## 2026-10-28 (night) — real-desktop run C, release
+
+- The notification toast was gone, so `real_desktop.py` ran on the current
+  code: 11/11, including the checks the toast had blocked (live theme
+  change, empty workspace focusing the desktop, focus after workspace
+  switches with 40 windows).
+- **Test bug:** the first attempt passed but its resolution check covered 0
+  windows. After the 40 test windows closed, Windows gave the foreground to
+  the Terminal on DISPLAY2, the manager followed (README limitation), and
+  the test's next `workspace 1` switched DISPLAY2 instead of the primary
+  monitor (confirmed in the manager log with `--keep`). Fixed in the test:
+  refocus the primary monitor before switching back, wait for closed windows
+  to go before cleanup in `t_empty_ws`, and fail the resolution check if the
+  secondary monitor's real windows are hidden.
+- `interactive.py` on the same code: 9/9 (Win+Right → focus change 51 ms).
+- Packages rebuilt and published as the v0.1.0 GitHub release.
+

@@ -458,7 +458,11 @@ def t_empty_ws(ctx):
     finally:
         p.kill()
         # Closing our last window lets Windows activate one on another
-        # monitor, and the manager follows the keyboard focus there.
+        # monitor, and the manager follows the keyboard focus there. Wait for
+        # that to happen first, or it can arrive after `focusmonitor` and the
+        # switch back lands on the other monitor.
+        wait_for(lambda: not is_window(ids[0]), 3)
+        time.sleep(0.5)
         ctx.ctl("dispatch", "focusmonitor", str(ctx.primary_index + 1))
         ctx.ctl("dispatch", "workspace", str(home))
     return f"desktop {desk:#x} focused on empty workspace 30; new window opened there"
@@ -538,6 +542,9 @@ def many_body(ctx, w, s0, home):
             p.kill()
     gone = wait_for(lambda: not any(is_window(i) for ids in batches for i in ids), 5)
     time.sleep(1.0)
+    # Closing them let Windows focus a window on the other monitor (README
+    # limitations); go back to the primary monitor before switching home.
+    ctx.ctl("dispatch", "focusmonitor", str(ctx.primary_index + 1))
     ctx.ctl("dispatch", "workspace", str(home))
     time.sleep(0.5)
     st = ctx.state()
@@ -574,7 +581,9 @@ def t_display_change(ctx):
         return f"skipped: no alternative mode on {dev}"
     st = ctx.state()
     on_sec = [k for k, v in managed(ctx).items() if st["workspaces"][str(v["ws"])]["monitor"] == i and visible(k)]
-    log(f"  secondary monitor index {i} ({dev}); managed: " + ", ".join(f"{k:#x} ws {v['ws']} mon {st['workspaces'][str(v['ws'])]['monitor']} vis {visible(k)}" for k, v in managed(ctx).items()))
+    if ctx.real_on_secondary:
+        assert on_sec, "the real windows on the secondary monitor are hidden (an earlier check left another workspace shown)"
+    log(f"  secondary monitor index {i} ({dev}); active workspaces {[m['active_ws'] for m in mons]}; managed: " + ", ".join(f"{k:#x} ws {v['ws']} mon {st['workspaces'][str(v['ws'])]['monitor']} vis {visible(k)}" for k, v in managed(ctx).items()))
     ctx.mode_changed = True
     rc = set_mode(dev, *target)
     assert rc == 0, f"ChangeDisplaySettingsEx returned {rc}"
@@ -684,6 +693,8 @@ def main():
         mons = ctx.state()["monitors"]
         ctx.primary_index = next(i for i, m in enumerate(mons) if m["rect"]["x"] == 0 and m["rect"]["y"] == 0)
         ctx.primary = mons[ctx.primary_index]
+        st = ctx.state()
+        ctx.real_on_secondary = [k for k, v in st["windows"].items() if st["workspaces"][str(v["ws"])]["monitor"] != ctx.primary_index]
         for t in (t_tiles_real, t_theme, t_animations, t_workspace, t_fullscreen, t_empty_ws, t_many, t_display_change, t_quit, t_restart):
             t(ctx)
     finally:

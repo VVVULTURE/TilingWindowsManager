@@ -87,19 +87,20 @@ keyboard and mouse**: run only while nobody is using the PC (each step checks
 `GetLastInputInfo` and aborts if the user is active). Elevated windows in the
 foreground block injected input (UIPI), so close them first.
 
-Last full run: **9/9 pass**, release build, 2026-10-28 (before commit
-`469f580`, which changed focus handling — must be re-run).
+Last full run: **9/9 pass**, release build, 2026-10-28, on `5d5ec41`
+(after the focus changes in `469f580`). The table shows that run; the
+earlier run before `469f580` was also 9/9.
 
 | Test | Checks | Last result (2026-10-28, release) |
 |---|---|---|
-| `t_hook` | Win+Right through the LL hook moves focus; key swallowed; Start menu does not open | Pass; focus changed 32 ms after the key |
+| `t_hook` | Win+Right through the LL hook moves focus; key swallowed; Start menu does not open | Pass; focus changed 51 ms after the key (32 ms in the earlier run) |
 | `t_hook_layout` | Layout bind through the hook | Pass (Dwindle → Master) |
 | `t_hotkey` | `hotkey` backend works with a free chord and reports Win+1/Win+Left/Win+Right as not registered | Pass |
 | `t_mouse` | Drag tiled window onto another → swap; drag a split edge 60 px → ratio changes | Pass (edge 235 → 295 px) |
 | `t_notepad` | Real Win32/WinUI app tiles, hides with its workspace, comes back intact | Pass (after the `focus_on_activate` fix, see DEVELOPMENT_LOG) |
 | `t_electron` | VS Code (throw-away profile) tiles, hides on workspace switch, comes back | Pass |
 | `t_uwp` | Calculator: real process `CalculatorApp.exe` resolved through `ApplicationFrameHost`, floats by rule | Pass |
-| `t_restore_on_exit` | Quit puts pre-existing windows back where they were | Pass (556 ms) |
+| `t_restore_on_exit` | Quit puts pre-existing windows back where they were | Pass (534 ms) |
 | `t_elevated` | Elevated Task Manager is not managed; reason mentions UIPI | Pass |
 
 ## 4b. Real desktop, default configuration — `python tests/e2e/real_desktop.py`
@@ -121,32 +122,40 @@ given the foreground by the *previous* build's behaviour, and Windows then
 refused every activation request from both the manager and Explorer
 (`could not activate … (foreground is 0x103ce "New notification")`). A
 re-run after the toast is dismissed is pending.
+**Run C** (2026-10-28, `5d5ec41` + test fixes): **11/11 pass**, toast
+dismissed. Desktop at the time: Windows Terminal on DISPLAY2 only. A first
+attempt also passed 11/11 but the resolution check covered 0 windows: the
+test's own cleanup after closing the 40 windows switched workspace while
+Windows had moved the focus to DISPLAY2 (manager log: foreground →
+Terminal, then `Workspace(1)` applied to DISPLAY2 — the known limitation in
+the README). The test now refocuses the primary monitor first and fails the
+resolution check if the secondary monitor's real windows are hidden.
 
-| Check | Run A | Run B |
-|---|---|---|
-| First run writes `config/default.toml` byte-for-byte, 0 diagnostics | Pass, pipe answering 167 ms after launch | Pass, 126 ms |
-| 2 of 8 pre-existing windows managed (Terminal, Explorer; taskbars, Progman, overlays ignored); tiles exact; taskbar rects, work areas, Explorer PID unchanged | Pass | Pass |
-| Live theme change, pixel-sampled on both border rows: `minimal` e0e0e0 → measured (202,202,202)/(200,200,200), i.e. ×0.92–0.93 (the window's own shadow, README limitations); `nord` 88c0d0→81a1c1 gradient ×0.98; custom `themes/e2e-red.toml` ff2000 ×0.92–0.93; broken theme reported as `…\themes\e2e-red.toml:2: decoration.active_border: invalid hex colour … (from theme \`e2e-red\`)` | Pass | Not verified (toast held the foreground, new window could not be activated) |
-| Animations: `WM_WINDOWPOSCHANGED` per window during a layout change — enabled 15, disabled 1 | Pass | Pass (15/12 vs 1) |
-| Workspace switch with the real windows away and back (slide animation on): hidden in 22–37 ms, back in place in 30–43 ms (one outlier 197 ms) | Pass | Pass |
-| Borderless fullscreen popup covering the primary monitor: ignored ("covers the whole monitor without a title bar"), not moved, no border pixels drawn over it | Pass | Pass |
-| Switching to an empty workspace focuses the desktop; the next window opens on that monitor's workspace | (check added later) | Not verified (toast) |
-| 40 extra windows (5 workspaces × 8, master layout) | Pass | Pass, but the focus-after-switch assertions were skipped because of the toast |
-| Temporary resolution change of DISPLAY2 1920×1080 → 1280×720 → back (`ChangeDisplaySettingsEx` without `CDS_UPDATEREGISTRY`): manager picks up both changes; the 2 real windows re-tiled inside the new work area both times | Pass (0 windows were on it in that run — test bug, fixed) | Pass, 2 windows |
-| Quit restores every pre-existing window exactly (placement + frame); no border strips left; taskbar/Explorer untouched | Pass, quit 25 ms | Pass, 28 ms |
-| Restart re-manages the same windows; second quit restores them again | Pass | Pass |
+| Check | Run A | Run B | Run C |
+|---|---|---|---|
+| First run writes `config/default.toml` byte-for-byte, 0 diagnostics | Pass, pipe answering 167 ms after launch | Pass, 126 ms | Pass, 128 ms |
+| 2 of 8 pre-existing windows managed (Terminal, Explorer; taskbars, Progman, overlays ignored); tiles exact; taskbar rects, work areas, Explorer PID unchanged | Pass | Pass | Pass (1 of 7: Terminal) |
+| Live theme change, pixel-sampled on both border rows: `minimal` e0e0e0 → measured (202,202,202)/(200,200,200), i.e. ×0.92–0.93 (the window's own shadow, README limitations); `nord` 88c0d0→81a1c1 gradient ×0.98; custom `themes/e2e-red.toml` ff2000 ×0.92–0.93; broken theme reported as `…\themes\e2e-red.toml:2: decoration.active_border: invalid hex colour … (from theme \`e2e-red\`)` | Pass | Not verified (toast held the foreground, new window could not be activated) | Pass (×0.92–0.98, same as run A) |
+| Animations: `WM_WINDOWPOSCHANGED` per window during a layout change — enabled 15, disabled 1 | Pass | Pass (15/12 vs 1) | Pass (14/12 vs 1) |
+| Workspace switch with the real windows away and back (slide animation on): hidden in 22–37 ms, back in place in 30–43 ms (one outlier 197 ms) | Pass | Pass | Pass (21–28 / 24–26 ms) |
+| Borderless fullscreen popup covering the primary monitor: ignored ("covers the whole monitor without a title bar"), not moved, no border pixels drawn over it | Pass | Pass | Pass |
+| Switching to an empty workspace focuses the desktop; the next window opens on that monitor's workspace | (check added later) | Not verified (toast) | Pass |
+| 40 extra windows (5 workspaces × 8, master layout) | Pass | Pass, but the focus-after-switch assertions were skipped because of the toast | Pass, focus assertions included |
+| Temporary resolution change of DISPLAY2 1920×1080 → 1280×720 → back (`ChangeDisplaySettingsEx` without `CDS_UPDATEREGISTRY`): manager picks up both changes; the 2 real windows re-tiled inside the new work area both times | Pass (0 windows were on it in that run — test bug, fixed) | Pass, 2 windows | Pass, 1 window |
+| Quit restores every pre-existing window exactly (placement + frame); no border strips left; taskbar/Explorer untouched | Pass, quit 25 ms | Pass, 28 ms | Pass, 20 ms |
+| Restart re-manages the same windows; second quit restores them again | Pass | Pass | Pass |
 
-Measurements with 40 extra windows (43 managed), release build:
+Measurements with 40 extra windows (43 managed in runs A/B, 41 in run C), release build:
 
-| Metric | Run A | Run B |
-|---|---|---|
-| Spawn 8 windows → all tiled (includes test-window process start and IPC polling) | 290–349 ms per batch | 275–285 ms |
-| Workspace switch 8 ↔ 8 windows, animations off, from launching `twmctl dispatch` until all 8 frames are in place (polled locally every 1 ms) | median 132 ms, max 144 ms | median 110 ms, max 112 ms |
-| `twmctl ping` round trip incl. process start (baseline for the line above) | median 11 ms | 11 ms |
-| CPU used by the manager while creating 40 windows and switching | 2062 ms | 1562 ms |
-| Idle CPU over 10 s with 43 windows | 0.0 ms | 0.0 ms |
-| Working set / private bytes | 14.9 / 2.9 MiB | 14.9 / 2.9 MiB |
-| Visible border strips with 40 windows / after closing them | 40 / 0 | 40 / 8 (= the 2 real windows) |
+| Metric | Run A | Run B | Run C |
+|---|---|---|---|
+| Spawn 8 windows → all tiled (includes test-window process start and IPC polling) | 290–349 ms per batch | 275–285 ms | 303–346 ms |
+| Workspace switch 8 ↔ 8 windows, animations off, from launching `twmctl dispatch` until all 8 frames are in place (polled locally every 1 ms) | median 132 ms, max 144 ms | median 110 ms, max 112 ms | median 119 ms, max 123 ms |
+| `twmctl ping` round trip incl. process start (baseline for the line above) | median 11 ms | 11 ms | 11 ms |
+| CPU used by the manager while creating 40 windows and switching | 2062 ms | 1562 ms | 1875 ms |
+| Idle CPU over 10 s with 43 windows | 0.0 ms | 0.0 ms | 0.0 ms |
+| Working set / private bytes | 14.9 / 2.9 MiB | 14.9 / 2.9 MiB | 15.0 / 3.0 MiB |
+| Visible border strips with 40 windows / after closing them | 40 / 0 | 40 / 8 (= the 2 real windows) | 36 / 4 (= the 1 real window) |
 
 Where the time goes (trace log of run A, one switch): the action was logged
 35 ms before the manager reached its focus step, i.e. it spent about 35 ms
